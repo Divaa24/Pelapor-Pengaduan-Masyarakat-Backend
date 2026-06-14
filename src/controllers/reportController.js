@@ -156,6 +156,7 @@ export const create = async (req, res) => {
         folder: "pelapor_reports",
       });
       imagePath = uploadRes.secure_url;
+      console.log("✅ Cloudinary upload:", { public_id: uploadRes.public_id, url: uploadRes.secure_url });
     }
     const isPublic = is_public === "false" ? false : true;
     const isUrgent = is_urgent === "true" ? true : false;
@@ -229,6 +230,7 @@ export const update = async (req, res) => {
         folder: "pelapor_reports",
       });
       imagePath = uploadRes.secure_url;
+      console.log("✅ Cloudinary upload (update):", { public_id: uploadRes.public_id, url: uploadRes.secure_url });
     }
 
     const { rows } = await pool.query(
