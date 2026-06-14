@@ -2,6 +2,7 @@ import pool from "../config/db.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import cloudinary from "../config/cloudinary.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -147,7 +148,15 @@ export const create = async (req, res) => {
         });
     }
 
-    const imagePath = req.file ? req.file.filename : null;
+    let imagePath = null;
+    if (req.file) {
+      // Convert buffer to data URI for Cloudinary
+      const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      const uploadRes = await cloudinary.uploader.upload(dataUri, {
+        folder: "pelapor_reports",
+      });
+      imagePath = uploadRes.secure_url;
+    }
     const isPublic = is_public === "false" ? false : true;
     const isUrgent = is_urgent === "true" ? true : false;
 
@@ -213,7 +222,14 @@ export const update = async (req, res) => {
         .status(403)
         .json({ success: false, message: "Tidak diizinkan" });
 
-    const imagePath = req.file ? req.file.filename : report.image;
+    let imagePath = report.image;
+    if (req.file) {
+      const dataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+      const uploadRes = await cloudinary.uploader.upload(dataUri, {
+        folder: "pelapor_reports",
+      });
+      imagePath = uploadRes.secure_url;
+    }
 
     const { rows } = await pool.query(
       `UPDATE public_reports SET
@@ -245,41 +261,58 @@ export const update = async (req, res) => {
 export const updateStatus = async (req, res) => {
   try {
     const { status, note, officer_name, estimated_done } = req.body;
-    const validStatus = ['pending', 'under_review', 'approved', 'rejected'];
+    const validStatus = ["pending", "under_review", "approved", "rejected"];
     if (!validStatus.includes(status))
-      return res.status(400).json({ success: false, message: 'Status tidak valid' });
+      return res
+        .status(400)
+        .json({ success: false, message: "Status tidak valid" });
 
     // Kalau approved, officer_name wajib
-    if (status === 'approved' && !officer_name)
-      return res.status(400).json({ success: false, message: 'Nama petugas wajib diisi saat menyetujui laporan' });
+    if (status === "approved" && !officer_name)
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Nama petugas wajib diisi saat menyetujui laporan",
+        });
 
     const existing = await pool.query(
-      'SELECT * FROM public_reports WHERE id = $1', [req.params.id]
+      "SELECT * FROM public_reports WHERE id = $1",
+      [req.params.id],
     );
     if (!existing.rows.length)
-      return res.status(404).json({ success: false, message: 'Laporan tidak ditemukan' });
+      return res
+        .status(404)
+        .json({ success: false, message: "Laporan tidak ditemukan" });
 
     const oldStatus = existing.rows[0].status;
 
     const { rows } = await pool.query(
-      'UPDATE public_reports SET status = $1 WHERE id = $2 RETURNING *',
-      [status, req.params.id]
+      "UPDATE public_reports SET status = $1 WHERE id = $2 RETURNING *",
+      [status, req.params.id],
     );
 
     await pool.query(
       `INSERT INTO status_history 
          (report_id, old_status, new_status, changed_by, note, officer_name, estimated_done)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [req.params.id, oldStatus, status, req.user.id,
-       note || null, officer_name || null, estimated_done || null]
+      [
+        req.params.id,
+        oldStatus,
+        status,
+        req.user.id,
+        note || null,
+        officer_name || null,
+        estimated_done || null,
+      ],
     );
 
-   const statusMsg = {
-     pending: "Laporan Anda sedang menunggu peninjauan",
-     under_review: "Laporan Anda sedang ditinjau oleh admin",
-     approved: `Laporan Anda telah disetujui. Petugas: ${officer_name}`,
-     rejected: "Laporan Anda ditolak",
-   };
+    const statusMsg = {
+      pending: "Laporan Anda sedang menunggu peninjauan",
+      under_review: "Laporan Anda sedang ditinjau oleh admin",
+      approved: `Laporan Anda telah disetujui. Petugas: ${officer_name}`,
+      rejected: "Laporan Anda ditolak",
+    };
 
     await pool.query(
       `INSERT INTO notifications (user_id, report_id, message, type)
@@ -288,11 +321,19 @@ export const updateStatus = async (req, res) => {
         existing.rows[0].user_id,
         req.params.id,
         statusMsg[status],
-        status === 'approved' ? 'success' : status === 'rejected' ? 'error' : 'info',
-      ]
+        status === "approved"
+          ? "success"
+          : status === "rejected"
+            ? "error"
+            : "info",
+      ],
     );
 
-    res.json({ success: true, message: 'Status berhasil diperbarui', data: rows[0] });
+    res.json({
+      success: true,
+      message: "Status berhasil diperbarui",
+      data: rows[0],
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -316,8 +357,16 @@ export const remove = async (req, res) => {
         .json({ success: false, message: "Tidak diizinkan" });
 
     if (report.image) {
-      const filePath = path.join(__dirname, "../../uploads", report.image);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      // Attempt to delete remote Cloudinary resource if image is a Cloudinary URL
+      try {
+        const m = report.image.match(/upload\/v\d+\/(.+)\.[a-zA-Z]+$/);
+        if (m && m[1]) {
+          const publicId = m[1];
+          await cloudinary.uploader.destroy(publicId);
+        }
+      } catch (e) {
+        // ignore deletion errors
+      }
     }
 
     await pool.query("DELETE FROM public_reports WHERE id = $1", [
