@@ -16,22 +16,24 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      "http://localhost:3000",  // Web frontend (Next.js)
-      "http://localhost:8081",  // Expo dev server
-      "http://localhost:19006", // Expo web
-    ];
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow all for development
-    }
-  },
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        "http://localhost:3000", // Web frontend (Next.js)
+        "http://localhost:8081", // Expo dev server
+        "http://localhost:19006", // Expo web
+      ];
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Allow all for development
+      }
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
@@ -60,5 +62,10 @@ app.use((err, _req, res, _next) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  const vercelHost = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : `http://localhost:${PORT}`;
+  console.log(
+    `✅ Berhasil tersambung ke server: ${vercelHost} (PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV || "development"})`,
+  );
 });

@@ -32,6 +32,7 @@ export const register = async (req, res) => {
       .status(201)
       .json({ success: true, message: "Registrasi berhasil", data: rows[0] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -78,6 +79,7 @@ export const login = async (req, res) => {
       data: userData,
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -90,6 +92,7 @@ export const getMe = async (req, res) => {
     );
     res.json({ success: true, data: rows[0] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -123,6 +126,7 @@ export const updateProfile = async (req, res) => {
       data: rows[0],
     });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ success: false, message: err.message });
   }
 };
